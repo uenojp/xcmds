@@ -11,14 +11,14 @@ int main(int argc, char** argv) {
     int fd;
     ssize_t nread;
 
-    int i_arg = 1;
+    int iargs = 1;
     do {
-        if (argc == 1 || !strcmp(argv[i_arg], "-"))
+        if (argc == 1 || !strcmp(argv[iargs], "-"))
             fd = STDIN_FILENO;
         else
-            fd = open(argv[i_arg], O_RDONLY);
+            fd = open(argv[iargs], O_RDONLY);
         if (fd < 0) {
-            fprintf(stderr, "cat: %s: %s\n", argv[i_arg], strerror(errno));
+            fprintf(stderr, "cat: %s: %s\n", argv[iargs], strerror(errno));
             continue;
         }
 
@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
         }
 
         close(fd);
-    } while (++i_arg < argc);
+    } while (++iargs < argc);
 
     return 0;
 }
