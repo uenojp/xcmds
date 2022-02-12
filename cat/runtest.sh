@@ -15,9 +15,10 @@ test1() {
         }
 }
 
-test1 "/etc/crontab"
+test1 "/etc/crontab" ""
 test1 "/etc/crontab" "-n"
-test1 "/etc/crontab /etc/passwd"
+test1 "/etc/crontab" "--number"
+test1 "/etc/crontab /etc/passwd" ""
 test1 "/etc/crontab /etc/passwd" "-n"
 test1 "/xxx/yyy"
 # test1 "" "-x"             # Non-existent option

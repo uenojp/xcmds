@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,20 @@
 #define BUF_SIZE 4096
 
 bool number = false;
+
+void usage() {
+    printf(
+        "Usage: cat [OPTION] [FILE]...\n"
+        "\n"
+        "    -n, --number    number all output lines\n"
+        "    -h, --help      display this help and exit\n");
+}
+
+struct option const long_options[] = {
+    {"number", no_argument, NULL, 'n'},
+    {"help", no_argument, NULL, 'h'},
+    {NULL, 0, NULL, 0},
+};
 
 int run(int argc, char** argv) {
     FILE* file = NULL;
@@ -48,10 +63,14 @@ int run(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     int opt;
-    while ((opt = getopt(argc, argv, "n")) != -1) {
+    while ((opt = getopt_long(argc, argv, "nh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'n':
                 number = true;
+                break;
+            case 'h':
+                usage();
+                exit(0);
                 break;
             default:
                 fprintf(stderr, "Try \'cat --help\' for more inforamtion.\n");
