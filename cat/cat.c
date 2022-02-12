@@ -6,27 +6,30 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define BUF_SIZE 4096
+
 int main(int argc, char** argv) {
-    char buf[4096];
-    int fd;
-    ssize_t nread;
+    char buf[BUF_SIZE];
+    FILE* file = NULL;
+    size_t nread;
 
     int iargs = 1;
     do {
-        if (argc == 1 || !strcmp(argv[iargs], "-"))
-            fd = STDIN_FILENO;
-        else
-            fd = open(argv[iargs], O_RDONLY);
-        if (fd < 0) {
+        if (argc == 1 || !strcmp(argv[iargs], "-")) {
+            file = stdin;
+        } else {
+            file = fopen(argv[iargs], "r");
+        }
+        if (file == NULL) {
             fprintf(stderr, "cat: %s: %s\n", argv[iargs], strerror(errno));
             continue;
         }
 
-        while ((nread = read(fd, buf, sizeof(buf))) > 0) {
-            write(STDOUT_FILENO, buf, nread);
+        while ((nread = fread(buf, 1, BUF_SIZE, file)) > 0) {
+            fwrite(buf, 1, nread, stdout);
         }
 
-        close(fd);
+        fclose(file);
     } while (++iargs < argc);
 
     return 0;
