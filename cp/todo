@@ -1,0 +1,13 @@
+* cp file1 file2
+
+* cp (file)+ dir
+
+* cp -r (file|dir)+ dir
+
+* cp -r dir (new)dir
+
+* cp -r dir (existing)dir
+
+- cp -r dir (existing)file
+
+- cp -r file (no-existent)dir
