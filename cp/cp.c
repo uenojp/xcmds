@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <getopt.h>
+#include <libgen.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,71 +23,101 @@ struct option const long_options[] = {
     {NULL, 0, NULL, 0},
 };
 
-int run(int argc, char** argv) {
-    int status = 0;
-    char* buf[BUF_SIZE];
-
-    FILE* input_file = NULL;
-    FILE* output_file = NULL;
-    if ((input_file = fopen(argv[1], "r")) == NULL) {
-        fprintf(stderr, "cat: %s: %s\n", argv[1], strerror(errno));
-        status = 1;
-        goto cleanup;
-    }
-    if ((output_file = fopen(argv[2], "w")) == NULL) {
-        fprintf(stderr, "cat: %s: %s\n", argv[2], strerror(errno));
-        status = 1;
-        goto cleanup;
-    }
-
-    size_t nread;
-    while ((nread = fread(buf, 1, BUF_SIZE, input_file)) > 0) {
-        fwrite(buf, 1, nread, output_file);
-    }
-
-cleanup:
-    if (input_file != NULL)
-        fclose(input_file);
-    if (output_file != NULL)
-        fclose(output_file);
-
-    return status;
-}
-
+/* Copy file to file.
+ *
+ * Intention: argc == 3
+ *          : argv[1] and argv[2] are files
+ *
+ * TODO:
+ *  - support character file(e.g. cp /etc/stdin foo) */
 int copy_file_to_file(int argc, char** argv) {
     int status = 0;
+
     char* buf[BUF_SIZE];
 
-    FILE* input_file = NULL;
-    FILE* output_file = NULL;
-    if ((input_file = fopen(argv[1], "r")) == NULL) {
+    FILE* ifile = NULL;
+    FILE* ofile = NULL;
+    if ((ifile = fopen(argv[optind], "r")) == NULL) {
         fprintf(stderr, "cat: %s: %s\n", argv[1], strerror(errno));
         status = 1;
         goto cleanup;
     }
-    if ((output_file = fopen(argv[2], "w+")) == NULL) {
+    if ((ofile = fopen(argv[optind + 1], "w+")) == NULL) {
         fprintf(stderr, "cat: %s: %s\n", argv[2], strerror(errno));
         status = 1;
         goto cleanup;
     }
 
     size_t nread;
-    while ((nread = fread(buf, 1, BUF_SIZE, input_file)) > 0) {
-        fwrite(buf, 1, nread, output_file);
+    while ((nread = fread(buf, 1, BUF_SIZE, ifile)) > 0) {
+        fwrite(buf, 1, nread, ofile);
     }
 
 cleanup:
-    if (input_file != NULL)
-        fclose(input_file);
-    if (output_file != NULL)
-        fclose(output_file);
+    if (ifile != NULL)
+        fclose(ifile);
+    if (ofile != NULL)
+        fclose(ofile);
 
     return status;
 }
 
-/* cp (file|dir)+ dir */
-int copy_to_dir(int argc, char** argv) {
-    ;
+/* Copy some files to a directory.
+ * e.g. cp file1 file2 file3 dir/
+ *
+ * Intention: argv[i] is an existent file, for all optind < i < argc - 1
+ *          : argv[argc - 1] is a directory */
+int copy_files_to_dir(int argc, char** argv) {
+    int status = 0;
+
+    char buf[BUF_SIZE];
+
+    FILE* ifile;
+    FILE* ofile;
+    for (int i = optind; i < argc - 1; i++) {
+        ifile = NULL;
+        ofile = NULL;
+
+        /* Concatenate the directory name and the file name
+         * output path := dir + "/" + file
+         *  where dir := argv[argc-1], file := basename(argv[i])
+         *
+         * `dir` may contain trailing slashes, but this is not a problem
+         * because multiple shashes are interpreted as a single slash.
+         * ref. https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap03.html#tag_03_271 */
+        const char* base = basename(argv[i]);
+        size_t olen = strlen(argv[argc - 1]) + strlen("/") + strlen(base) + 1;
+        char opath[olen];
+        memset(opath, 0, olen);
+        strncat(opath, argv[argc - 1], strlen(argv[argc - 1]) + 1);
+        strncat(opath, "/", strlen("/") + 1);
+        strncat(opath, base, strlen(base) + 1);
+
+        ifile = fopen(argv[i], "r");
+        if (ifile == NULL) {
+            fprintf(stderr, "cp: %s: %s\n", argv[i], strerror(errno));
+            status = 1;
+            goto cleanup;
+        }
+        ofile = fopen(opath, "w+");
+        if (ofile == NULL) {
+            fprintf(stderr, "cp: %s: %s\n", opath, strerror(errno));
+            status = 1;
+            goto cleanup;
+        }
+
+        size_t nread;
+        while ((nread = fread(buf, 1, BUF_SIZE, ifile)) > 0) {
+            fwrite(buf, 1, nread, ofile);
+        }
+
+    cleanup:
+        if (ifile != NULL)
+            fclose(ifile);
+        if (ofile != NULL)
+            fclose(ofile);
+    }
+    return status;
 }
 
 int main(int argc, char** argv) {
@@ -106,35 +137,48 @@ int main(int argc, char** argv) {
         }
     }
 
+    /* Assume no options for now. */
+
     int status = 0;
 
-    /* cp (file|dir){0,1} */
     if (argc < 3) {
         fprintf(stderr, "cp: missing file\n");
         exit(1);
     }
 
-    /* cp file (file|dir) */
+    /* Copy file to file or file to directory. */
     if (argc == 3) {
         struct stat src;
         struct stat dest;
         stat(argv[1], &src);
         stat(argv[2], &dest);
-        if (S_ISREG(src.st_mode) || S_ISCHR(src.st_mode)) {
+        if (S_ISREG(src.st_mode) /* || S_ISCHR(src.st_mode) */) {
             if (S_ISDIR(dest.st_mode)) {
-                status = copy_to_dir(argc, argv);
+                /* Copy files to directory.
+                 * e.g. cp file dir/ */
+                status = copy_files_to_dir(argc, argv);
             } else {
+                /* Copy file to file.
+                 * e.g. cp file1 file2, cp file dir/file */
                 status = copy_file_to_file(argc, argv);
             }
+        } else {
+            fprintf(stderr, "cp: %s is not a regular file\n", argv[1]);
+            status = 1;
         }
     }
-    /* cp (file|dir){2,} file */
-    // if (argc > 3 && !S_ISDIR(s.st_mode)) {
-    //     struct stat s;
-    //     stat(argv[argc - 1], &s);
-    //     fprintf(stderr, "cp: \'%s\' is not a directory\n", argv[argc - 1]);
-    //     exit(1);
-    // }
+
+    /* Copy some files to directory. */
+    if (argc > 3) {
+        struct stat dest;
+        stat(argv[argc - 1], &dest);
+        if (S_ISDIR(dest.st_mode)) {
+            copy_files_to_dir(argc, argv);
+        } else {
+            fprintf(stderr, "cp: %s is not a directory\n", argv[argc - 1]);
+            status = 1;
+        }
+    }
 
     return status;
 }
